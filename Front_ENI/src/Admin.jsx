@@ -35,6 +35,11 @@ export default function Administrador() {
     navigate("/reportes");
   };
 
+  // Función para navegar a Gestión de Cursos
+  const irAGestionCursos = () => {
+    navigate("/gestion-cursos");
+  };
+
   if (!usuario) return <p>Cargando...</p>;
 
   return (
@@ -81,6 +86,14 @@ export default function Administrador() {
             <div className="card-icon icon-empresarial"></div>
             <h4>Gestión de Usuarios</h4>
             <p>Administra los usuarios del sistema</p>
+            <div className="card-hover-indicator">→</div>
+          </button>
+
+          {/* Botón de Gestión de Cursos */}
+          <button className="dashboard-card clickable-card" onClick={irAGestionCursos}>
+            <div className="card-icon icon-cursos"></div>
+            <h4>Gestión de Cursos</h4>
+            <p>Crea, edita y elimina cursos</p>
             <div className="card-hover-indicator">→</div>
           </button>
 
