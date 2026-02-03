@@ -7,8 +7,11 @@ import Login from "./Login";
 import Usuario from "./Usuario";
 import RutaProtegida from "./RutaProtegida";
 import Administrador from "./Admin";
+import GestionCursos from "./GestionCursos";
+import CursosDisponibles from "./CursosDisponibles";
 import EnviarNotificacionPorArea from "./notificaciones";
 import MisNotificaciones from "./MisNotificaciones";
+import SubirEvidencias from "./SubirEvidencias";
 import "./css/global.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
@@ -19,7 +22,22 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <Route path="/register" element={<Registro />} />
         <Route path="/login" element={<Login />} />
         <Route path="/notificaciones" element={<EnviarNotificacionPorArea />} />
-        <Route path="/mis-notificaciones" element={<MisNotificaciones />} />
+        <Route
+          path="/mis-notificaciones"
+          element={
+            <RutaProtegida>
+              <MisNotificaciones />
+            </RutaProtegida>
+          }
+        />
+        <Route
+          path="/subir-evidencias"
+          element={
+            <RutaProtegida>
+              <SubirEvidencias />
+            </RutaProtegida>
+          }
+        />
 
 
         <Route
@@ -32,21 +50,36 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         />
 
         <Route
-          path="/administrador"
+          path="/admin"
           element={
             <RutaProtegida rolRequerido="Administrador">
               <Administrador />
             </RutaProtegida>
           }
         />
-        {/* <Route
-          path="/notificaciones"
+
+        <Route
+          path="/gestion-cursos"
           element={
             <RutaProtegida rolRequerido="Administrador">
-              <Notificaciones />
+              <GestionCursos />
             </RutaProtegida>
           }
-        /> */}
+        />
+
+        <Route
+          path="/cursos-disponibles"
+          element={
+            <RutaProtegida>
+              <CursosDisponibles />
+            </RutaProtegida>
+          }
+        />
+
+        <Route
+          path="/administrador"
+          element={<Navigate to="/admin" replace />}
+        />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>

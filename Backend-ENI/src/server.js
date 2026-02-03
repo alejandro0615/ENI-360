@@ -2,6 +2,9 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import usuarioRoutes from "./routes/usuarios.js";
+import cursoRoutes from "./routes/cursos.js";
+import inscripcionRoutes from "./routes/inscripciones.js";
+import archivoRoutes from "./routes/archivos.js";
 import { conectarDB, sequelize } from "./database/config.js";
 import { Usuario } from "./database/models/usuarios.js";
 import areaRoutes from "./routes/areas.js";
@@ -32,6 +35,9 @@ sequelize.sync().then(() => {
 // Rutas
 app.use("/api/usuarios", usuarioRoutes);
 app.use("/api/areas", areaRoutes);
+app.use("/api/cursos", cursoRoutes);
+app.use("/api/inscripciones", inscripcionRoutes);
+app.use("/api/archivos", archivoRoutes);
 
 app.get("/", (req, res) => {
   res.json({ mensaje: "API ENI lista 🚀 con MySQL" });
