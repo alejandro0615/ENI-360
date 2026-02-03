@@ -63,7 +63,10 @@ export default function SubirEvidencias() {
         setDescripcion("");
         setArchivos([{ id: Date.now(), file: null }]);
       } else {
-        setEstado(`❌ ${data.mensaje || "Error al subir evidencia"}`);
+        console.error("Error respuesta /subir-evidencia:", data);
+        setEstado(
+          `❌ ${data.mensaje || "Error al subir evidencia"}${data.error ? ' - ' + data.error : ''}`
+        );
       }
     } catch (err) {
       console.error(err);

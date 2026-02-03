@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import { Usuario } from "../database/models/usuarios.js";
 import { Area } from "../database/models/area.js";
+import { Archivo } from "../database/models/archivos.js";
 import verifyToken from "../middleware/verifyToken.js";
 import verifyCaptcha from "../middleware/verifyCaptcha.js";
 import nodemailer from "nodemailer";
@@ -266,15 +267,42 @@ router.post("/notificar-por-area", verifyToken, upload.array("archivos", 5), asy
     }
 
     // Crear notificación para cada usuario encontrado
-    await Notificacion.bulkCreate(
-      usuarios.map((u) => ({
-        usuarioId: u.id,
-        areaId: u.areaId, // guardas el área real del usuario
-        asunto,
-        mensaje,
-        archivos: JSON.stringify(archivos),
-      }))
-    );
+    // Verificar esquema real de la tabla notificaciones en la BD
+    const qi = Usuario.sequelize.getQueryInterface();
+    const cols = await qi.describeTable("notificaciones");
+
+    if (cols.archivos) {
+      await Notificacion.bulkCreate(
+        usuarios.map((u) => ({
+          usuarioId: u.id,
+          areaId: u.areaId, // guardas el área real del usuario
+          asunto,
+          mensaje,
+          archivos: JSON.stringify(archivos),
+        }))
+      );
+    } else if (cols.archivo) {
+      // fallback a columna singular si la tabla antigua tiene 'archivo'
+      await Notificacion.bulkCreate(
+        usuarios.map((u) => ({
+          usuarioId: u.id,
+          areaId: u.areaId,
+          asunto,
+          mensaje,
+          archivo: archivos[0] || null,
+        }))
+      );
+    } else {
+      // ninguna columna para archivos, crear sin archivos
+      await Notificacion.bulkCreate(
+        usuarios.map((u) => ({
+          usuarioId: u.id,
+          areaId: u.areaId,
+          asunto,
+          mensaje,
+        }))
+      );
+    }
     return res.json({
       mensaje: `Notificación enviada a ${usuarios.length} usuarios de las áreas: ${parsedAreaIds.join(
         ", "
@@ -315,67 +343,129 @@ router.get("/mis-notificaciones", verifyToken, async (req, res) => {
 });
 
 
-// Subir evidencias (usuarios) -> crea notificación para cada administrador
-router.post("/subir-evidencia", verifyToken, uploadEvidencias.array("archivos", 5), async (req, res) => {
-  try {
-    if (req.usuario.rol === "Administrador") {
-      return res.status(400).json({
-        mensaje: "Los administradores no pueden subir evidencias desde aquí",
+// Subir evidencias (usuarios) -> crea registros en tabla archivos y notificaciones
+// Envolvemos la llamada a multer para capturar errores de forma explícita
+router.post(
+  "/subir-evidencia",
+  verifyToken,
+  (req, res, next) => {
+    // ejecutar multer y capturar errores específicos
+    uploadEvidencias.array("archivos", 5)(req, res, (err) => {
+      if (err) {
+        console.error("MULTER ERROR en /subir-evidencia:", err);
+        // devolver mensaje claro para el frontend
+        return res.status(400).json({ mensaje: err.message || "Error al procesar archivos" });
+      }
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      if (req.usuario.rol === "Administrador") {
+        return res.status(400).json({
+          mensaje: "Los administradores no pueden subir evidencias desde aquí",
+        });
+      }
+
+      const { descripcion = "" } = req.body;
+      const archivosSubidos = req.files || [];
+
+      if (archivosSubidos.length === 0) {
+        return res.status(400).json({ mensaje: "Debes subir al menos un archivo PDF" });
+      }
+
+      console.log(`[SUBIR-EVIDENCIA] Usuario ${req.usuario.id} subiendo ${archivosSubidos.length} archivo(s)`);
+
+      // PASO 1: Crear registros en la tabla 'archivos'
+      const archivosACrear = archivosSubidos.map((file) => {
+        const rutaWeb = path.relative(process.cwd(), file.path).replace(/\\/g, "/");
+        return {
+          usuarioId: req.usuario.id,
+          nombre: file.originalname,
+          ruta: rutaWeb,
+          tipo: file.mimetype,
+          tamaño: file.size,
+          descripcion: descripcion.trim() || null,
+          estado: "pendiente",
+          fechaCarga: new Date(),
+        };
       });
-    }
 
-    const { descripcion = "" } = req.body;
-    const archivosSubidos = req.files || [];
+      console.log(`[SUBIR-EVIDENCIA] Creando ${archivosACrear.length} registros en tabla archivos...`);
+      const archivosCreados = await Archivo.bulkCreate(archivosACrear);
+      console.log(`[SUBIR-EVIDENCIA] ✓ ${archivosCreados.length} registros creados en archivos`);
 
-    if (archivosSubidos.length === 0) {
-      return res.status(400).json({
-        mensaje: "Debes subir al menos un archivo PDF",
+      // PASO 2: Obtener administradores
+      const admins = await Usuario.findAll({ where: { rol: "Administrador" }, attributes: ["id"] });
+
+      if (admins.length === 0) {
+        console.warn("[SUBIR-EVIDENCIA] No hay administradores en el sistema");
+        return res.status(500).json({ mensaje: "No hay administradores en el sistema para notificar" });
+      }
+
+      console.log(`[SUBIR-EVIDENCIA] Encontrados ${admins.length} administrador(es)`);
+
+      // PASO 3: Preparar datos de notificación
+      const rutasWeb = archivosCreados.map((a) => a.ruta);
+      const nombreUsuario = [req.usuario.nombre, req.usuario.apellido].filter(Boolean).join(" ") || "Usuario";
+      const asunto = `📎 Nueva evidencia enviada por ${nombreUsuario}`;
+      const mensaje =
+        descripcion.trim() || `El usuario ${nombreUsuario} ha subido ${archivosSubidos.length} archivo(s) como evidencia.`;
+
+      // PASO 4: Verificar existencia de columna 'archivos' en notificaciones
+      const qi = Usuario.sequelize.getQueryInterface();
+      const colsNotificaciones = await qi.describeTable("notificaciones");
+      console.log(`[SUBIR-EVIDENCIA] Columnas en notificaciones:`, Object.keys(colsNotificaciones));
+
+      // PASO 5: Crear notificaciones con la columna disponible
+      let notificacionesCreadas = 0;
+      
+      if (colsNotificaciones.archivos) {
+        console.log("[SUBIR-EVIDENCIA] Usando columna 'archivos' para guardar rutas");
+        const notifsACrear = admins.map((admin) => ({
+          usuarioId: admin.id,
+          areaId: null,
+          asunto,
+          mensaje,
+          archivos: JSON.stringify(rutasWeb),
+        }));
+        await Notificacion.bulkCreate(notifsACrear);
+        notificacionesCreadas = notifsACrear.length;
+      } else if (colsNotificaciones.archivo) {
+        console.log("[SUBIR-EVIDENCIA] Usando columna 'archivo' (fallback) para guardar primera ruta");
+        const notifsACrear = admins.map((admin) => ({
+          usuarioId: admin.id,
+          areaId: null,
+          asunto,
+          mensaje,
+          archivo: rutasWeb[0] || null,
+        }));
+        await Notificacion.bulkCreate(notifsACrear);
+        notificacionesCreadas = notifsACrear.length;
+      } else {
+        console.log("[SUBIR-EVIDENCIA] Sin columna de archivos, creando notificaciones sin rutas");
+        const notifsACrear = admins.map((admin) => ({
+          usuarioId: admin.id,
+          areaId: null,
+          asunto,
+          mensaje,
+        }));
+        await Notificacion.bulkCreate(notifsACrear);
+        notificacionesCreadas = notifsACrear.length;
+      }
+
+      console.log(`[SUBIR-EVIDENCIA] ✓ ${notificacionesCreadas} notificaciones creadas`);
+      return res.json({ 
+        mensaje: `Evidencia subida correctamente. Se ha notificado a ${notificacionesCreadas} administrador(es).`,
+        archivosCreados: archivosCreados.length,
+        notificacionesCreadas: notificacionesCreadas
       });
+    } catch (err) {
+      console.error("ERROR CRÍTICO en /subir-evidencia:", err);
+      res.status(500).json({ mensaje: "Error al subir la evidencia", error: err.message });
     }
-
-    const rutasWeb = archivosSubidos.map((f) => {
-      const rel = path.relative(process.cwd(), f.path);
-      return rel.replace(/\\/g, "/");
-    });
-
-    const admins = await Usuario.findAll({
-      where: { rol: "Administrador" },
-      attributes: ["id"],
-    });
-
-    if (admins.length === 0) {
-      return res.status(500).json({
-        mensaje: "No hay administradores en el sistema para notificar",
-      });
-    }
-
-    const nombreUsuario = [req.usuario.nombre, req.usuario.apellido].filter(Boolean).join(" ") || "Usuario";
-    const asunto = `📎 Nueva evidencia enviada por ${nombreUsuario}`;
-    const mensaje =
-      descripcion.trim() ||
-      `El usuario ${nombreUsuario} ha subido ${archivosSubidos.length} archivo(s) como evidencia.`;
-
-    await Notificacion.bulkCreate(
-      admins.map((admin) => ({
-        usuarioId: admin.id,
-        areaId: null,
-        asunto,
-        mensaje,
-        archivos: JSON.stringify(rutasWeb),
-      }))
-    );
-
-    return res.json({
-      mensaje: `Evidencia subida correctamente. Se ha notificado a ${admins.length} administrador(es).`,
-    });
-  } catch (err) {
-    console.error("Error al subir evidencia:", err);
-    res.status(500).json({
-      mensaje: "Error al subir la evidencia",
-      error: err.message,
-    });
   }
-});
+);
 
 // Marcar una notificación como leída
 router.post("/notificaciones/:id/marcar-leida", verifyToken, async (req, res) => {
