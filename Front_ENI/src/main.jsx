@@ -11,6 +11,7 @@ import GestionCursos from "./GestionCursos";
 import CursosDisponibles from "./CursosDisponibles";
 import EnviarNotificacionPorArea from "./notificaciones";
 import MisNotificaciones from "./MisNotificaciones";
+import SubirEvidencias from "./SubirEvidencias";
 import "./css/global.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
@@ -21,7 +22,22 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <Route path="/register" element={<Registro />} />
         <Route path="/login" element={<Login />} />
         <Route path="/notificaciones" element={<EnviarNotificacionPorArea />} />
-        <Route path="/mis-notificaciones" element={<MisNotificaciones />} />
+        <Route
+          path="/mis-notificaciones"
+          element={
+            <RutaProtegida>
+              <MisNotificaciones />
+            </RutaProtegida>
+          }
+        />
+        <Route
+          path="/subir-evidencias"
+          element={
+            <RutaProtegida>
+              <SubirEvidencias />
+            </RutaProtegida>
+          }
+        />
 
 
         <Route

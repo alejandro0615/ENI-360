@@ -48,6 +48,9 @@ export default function MisNotificaciones() {
     }
   };
 
+  const usuario = JSON.parse(localStorage.getItem("usuario") || "{}");
+  const esAdmin = usuario.rol === "Administrador";
+
   const parseArchivos = (archivosRaw) => {
     if (!archivosRaw) return [];
     try {
@@ -66,7 +69,9 @@ export default function MisNotificaciones() {
           📩 Mis notificaciones {noLeidas > 0 && `(${noLeidas} sin leer)`}
         </h2>
         <p className="notificacion-subtitle">
-          Aquí verás todos los mensajes que el administrador ha enviado a tu red.
+          {esAdmin
+            ? "Aquí verás las evidencias que los usuarios han subido y las notificaciones del sistema."
+            : "Aquí verás todos los mensajes que el administrador ha enviado a tu red."}
         </p>
 
         {estado && <p className="notificacion-estado">{estado}</p>}
@@ -132,7 +137,7 @@ export default function MisNotificaciones() {
           <button
             type="button"
             className="btn-anim btn-cerrar"
-            onClick={() => navigate("/usuario")}>
+            onClick={() => navigate(esAdmin ? "/administrador" : "/usuario")}>
             Volver a mi panel
           </button>
         </div>

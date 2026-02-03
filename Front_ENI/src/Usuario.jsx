@@ -52,6 +52,10 @@ export default function Usuario() {
     navigate("/mis-notificaciones");
   };
 
+  const irASubirEvidencias = () => {
+    navigate("/subir-evidencias");
+  };
+
   if (!usuario) return <p>Cargando...</p>;
 
   return (
@@ -61,6 +65,9 @@ export default function Usuario() {
         <div className="header-buttons">
           <button className="btn-notificaciones" onClick={irAMisNotificaciones}>
             Ver notificaciones
+          </button>
+          <button className="btn-evidencias" onClick={irASubirEvidencias}>
+            Subir evidencias
           </button>
           <button className="btn-cursos" onClick={irACursosDisponibles}>
             Ver cursos disponibles
