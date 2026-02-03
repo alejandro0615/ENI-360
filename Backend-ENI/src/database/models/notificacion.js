@@ -27,9 +27,14 @@ export const Notificacion = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: false,
     },
-    archivo: {                  
+    archivo: {
       type: DataTypes.STRING,
       allowNull: true,
+    },
+    archivos: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: "JSON array de rutas de archivos",
     },
     leida: {
       type: DataTypes.BOOLEAN,
