@@ -68,6 +68,13 @@ export default function Administrador() {
               <span>Enviar Notificación</span>
             </button>
 
+            <button className="btn-anim" onClick={() => navigate("/mis-notificaciones")}>
+              <div className="btn-icon">
+                <div className="icon-virtual"></div>
+              </div>
+              <span>Mis notificaciones</span>
+            </button>
+
             <button className="btn-anim btn-cerrar" onClick={cerrarSesion}>
               <div className="btn-icon">
                 <div className="icon-idiomas"></div>

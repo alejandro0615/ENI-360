@@ -17,10 +17,14 @@ dotenv.config();
 const router = express.Router();
 
 const uploadDir = path.join(process.cwd(), "uploads", "notificaciones");
+const uploadDirEvidencias = path.join(process.cwd(), "uploads", "evidencias");
 
-// Crear carpeta si no existe
+// Crear carpetas si no existen
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
+}
+if (!fs.existsSync(uploadDirEvidencias)) {
+  fs.mkdirSync(uploadDirEvidencias, { recursive: true });
 }
 
 const storage = multer.diskStorage({
@@ -33,8 +37,28 @@ const storage = multer.diskStorage({
   },
 });
 
+const storageEvidencias = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDirEvidencias);
+  },
+  filename: (req, file, cb) => {
+    const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, unique + "-" + file.originalname);
+  },
+});
+
 const upload = multer({
   storage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype !== "application/pdf") {
+      return cb(new Error("Solo se permiten archivos PDF"));
+    }
+    cb(null, true);
+  },
+});
+
+const uploadEvidencias = multer({
+  storage: storageEvidencias,
   fileFilter: (req, file, cb) => {
     if (file.mimetype !== "application/pdf") {
       return cb(new Error("Solo se permiten archivos PDF"));
@@ -273,16 +297,85 @@ router.get("/mis-notificaciones", verifyToken, async (req, res) => {
     const notificaciones = await Notificacion.findAll({
       where: { usuarioId: req.usuario.id },
       order: [["creadaEn", "DESC"]],
-      attributes: ["id", "asunto", "mensaje", "leida", "creadaEn"],
+      attributes: ["id", "asunto", "mensaje", "leida", "creadaEn", "archivos", "archivo"],
     });
 
-    res.json({ notificaciones });
+    // Normalizar: si existe archivo (legacy) o archivos, exponer como archivos
+    const normalized = notificaciones.map((n) => {
+      const data = n.toJSON();
+      const archivosRaw = data.archivos || data.archivo;
+      return { ...data, archivos: archivosRaw };
+    });
+
+    res.json({ notificaciones: normalized });
   } catch (err) {
     console.error("Error al obtener notificaciones:", err);
     res.status(500).json({ mensaje: "Error al obtener notificaciones" });
   }
 });
 
+
+// Subir evidencias (usuarios) -> crea notificación para cada administrador
+router.post("/subir-evidencia", verifyToken, uploadEvidencias.array("archivos", 5), async (req, res) => {
+  try {
+    if (req.usuario.rol === "Administrador") {
+      return res.status(400).json({
+        mensaje: "Los administradores no pueden subir evidencias desde aquí",
+      });
+    }
+
+    const { descripcion = "" } = req.body;
+    const archivosSubidos = req.files || [];
+
+    if (archivosSubidos.length === 0) {
+      return res.status(400).json({
+        mensaje: "Debes subir al menos un archivo PDF",
+      });
+    }
+
+    const rutasWeb = archivosSubidos.map((f) => {
+      const rel = path.relative(process.cwd(), f.path);
+      return rel.replace(/\\/g, "/");
+    });
+
+    const admins = await Usuario.findAll({
+      where: { rol: "Administrador" },
+      attributes: ["id"],
+    });
+
+    if (admins.length === 0) {
+      return res.status(500).json({
+        mensaje: "No hay administradores en el sistema para notificar",
+      });
+    }
+
+    const nombreUsuario = [req.usuario.nombre, req.usuario.apellido].filter(Boolean).join(" ") || "Usuario";
+    const asunto = `📎 Nueva evidencia enviada por ${nombreUsuario}`;
+    const mensaje =
+      descripcion.trim() ||
+      `El usuario ${nombreUsuario} ha subido ${archivosSubidos.length} archivo(s) como evidencia.`;
+
+    await Notificacion.bulkCreate(
+      admins.map((admin) => ({
+        usuarioId: admin.id,
+        areaId: null,
+        asunto,
+        mensaje,
+        archivos: JSON.stringify(rutasWeb),
+      }))
+    );
+
+    return res.json({
+      mensaje: `Evidencia subida correctamente. Se ha notificado a ${admins.length} administrador(es).`,
+    });
+  } catch (err) {
+    console.error("Error al subir evidencia:", err);
+    res.status(500).json({
+      mensaje: "Error al subir la evidencia",
+      error: err.message,
+    });
+  }
+});
 
 // Marcar una notificación como leída
 router.post("/notificaciones/:id/marcar-leida", verifyToken, async (req, res) => {

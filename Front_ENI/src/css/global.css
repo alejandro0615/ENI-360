@@ -1641,6 +1641,23 @@ footer a:hover {
   transform: translateY(-2px);
 }
 
+.btn-evidencias {
+  background: linear-gradient(135deg, #9c27b0, #7b1fa2);
+  color: #fff;
+  border: none;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.btn-evidencias:hover {
+  background: linear-gradient(135deg, #7b1fa2, #6a1b9a);
+  transform: translateY(-2px);
+}
+
 .btn-cursos {
   background: linear-gradient(135deg, #2196f3, #1976d2);
   color: #fff;
@@ -1891,6 +1908,7 @@ footer a:hover {
   }
 
   .btn-notificaciones,
+  .btn-evidencias,
   .btn-cursos,
   .btn-cerrar {
     width: 100%;
