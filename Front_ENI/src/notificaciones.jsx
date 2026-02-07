@@ -22,6 +22,7 @@ export default function EnviarNotificacionPorArea() {
   const enviarNotificacion = async () => {
     const token = localStorage.getItem("token");
     const areaIds = areasSeleccionadas.map((a) => a.id);
+  
     if (!areaIds.length || !asunto || !mensaje) {
       setEstado("⚠️ Selecciona un área y escribe asunto y mensaje");
       return;

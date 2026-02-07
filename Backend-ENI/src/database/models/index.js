@@ -8,6 +8,14 @@ import { Archivo } from "./archivos.js";
 Area.hasMany(Usuario, { foreignKey: "areaId", as: "instructores" });
 Usuario.belongsTo(Area, { foreignKey: "areaId", as: "area" });
 
+// --- RELACIÓN 1 (Área) a MUCHOS (Cursos) ---
+Area.hasMany(Curso, { foreignKey: "areaId", as: "cursos" });
+Curso.belongsTo(Area, { foreignKey: "areaId", as: "area" });
+
+// --- RELACIÓN 1 (Usuario) a MUCHOS (Cursos) ---
+Usuario.hasMany(Curso, { foreignKey: "usuarioId", as: "cursosCreados" });
+Curso.belongsTo(Usuario, { foreignKey: "usuarioId", as: "creador" });
+
 // --- RELACIÓN 1 (Usuario) a MUCHOS (Archivos) ---
 Usuario.hasMany(Archivo, { foreignKey: "usuarioId", as: "archivos" });
 Archivo.belongsTo(Usuario, { foreignKey: "usuarioId", as: "usuario" });

@@ -27,9 +27,17 @@ export const Usuario = sequelize.define(
       allowNull: false,
     },
     rol: {
-      type: DataTypes.ENUM('Administrador', 'Estudiante'),
+      type: DataTypes.ENUM('Administrador', 'Estudiante', 'Formador'),
       defaultValue: "Estudiante",
       allowNull: false,
+    },
+    areaId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'areas',
+        key: 'id'
+      }
     },
   },
   {

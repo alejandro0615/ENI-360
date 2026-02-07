@@ -136,7 +136,7 @@ router.post("/login", verifyCaptcha, async (req, res) => {
       return res.status(401).json({ mensaje: "Contraseña incorrecta" });
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, nombre: user.nombre, apellido: user.apellido, rol: user.rol },
+      { id: user.id, email: user.email, nombre: user.nombre, apellido: user.apellido, rol: user.rol, areaId: user.areaId },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || "1h" }
     );
@@ -150,6 +150,7 @@ router.post("/login", verifyCaptcha, async (req, res) => {
         apellido: user.apellido,
         email: user.email,
         rol: user.rol,
+        areaId: user.areaId,
         categoria: user.categoria
       }
     });

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import GetAllCourses from "./services/Cursos/GetAllCourses";
+import GetCoursesByArea from "./services/Cursos/GetCoursesByArea";
 import GetUserEnrollments from "./services/Inscripciones/GetUserEnrollments";
 
 export default function Usuario() {
@@ -11,12 +12,11 @@ export default function Usuario() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Recupera datos guardados del usuario
     const datosUsuario = JSON.parse(localStorage.getItem("usuario"));
     const token = localStorage.getItem("token");
 
     if (!token || !datosUsuario) {
-      navigate("/login"); // si no está logueado, redirige
+      navigate("/login");
     } else {
       setUsuario(datosUsuario);
       loadCursosData();
@@ -25,11 +25,22 @@ export default function Usuario() {
 
   const loadCursosData = async () => {
     try {
-      const [cursosData, inscripcionesData] = await Promise.all([
-        GetAllCourses(),
-        GetUserEnrollments()
-      ]);
-      setCursosDisponibles(cursosData.slice(0, 3)); // Mostrar solo los primeros 3 cursos
+      const datosUsuario = JSON.parse(localStorage.getItem("usuario"));
+      let cursosData = [];
+      
+      if (datosUsuario?.rol === "Formador" && datosUsuario?.areaId) {
+        try {
+          cursosData = await GetCoursesByArea(datosUsuario.areaId);
+        } catch (err) {
+          console.warn("Error al obtener cursos por área:", err);
+          cursosData = [];
+        }
+      } else {
+        cursosData = await GetAllCourses();
+      }
+      
+      const inscripcionesData = await GetUserEnrollments();
+      setCursosDisponibles(Array.isArray(cursosData) ? cursosData.slice(0, 3) : []);
       setMisInscripciones(inscripcionesData);
     } catch (error) {
       console.error("Error cargando datos de cursos:", error);
@@ -56,22 +67,38 @@ export default function Usuario() {
     navigate("/subir-evidencias");
   };
 
+  const irAVerificarMisCursos = () => {
+    navigate("/verificar-mis-cursos");
+  };
+
   if (!usuario) return <p>Cargando...</p>;
 
   return (
     <div className="usuario-container">
       <header className="usuario-header">
         <h2>Bienvenido, {usuario.nombre}, {usuario.rol} 👋</h2>
+
         <div className="header-buttons">
+
+          {/* ✅ NUEVO BOTÓN */}
+          <button className="btn-cursos" onClick={irACursosDisponibles}>
+            📚 Cursos disponibles
+          </button>
+
+          {usuario.rol === "Formador" && (
+            <button className="btn-mis-cursos" onClick={irAVerificarMisCursos}>
+              📋 Verificar mis cursos
+            </button>
+          )}
+
           <button className="btn-notificaciones" onClick={irAMisNotificaciones}>
             Ver notificaciones
           </button>
+
           <button className="btn-evidencias" onClick={irASubirEvidencias}>
             Subir evidencias
           </button>
-          <button className="btn-cursos" onClick={irACursosDisponibles}>
-            Ver cursos disponibles
-          </button>
+
           <button className="btn-cerrar" onClick={cerrarSesion}>
             Cerrar sesión
           </button>
@@ -80,6 +107,7 @@ export default function Usuario() {
 
       <main className="usuario-main">
         <div className="dashboard-section">
+
           <div className="dashboard-card">
             <h3>📚 Mis Cursos</h3>
             {loading ? (
@@ -88,7 +116,11 @@ export default function Usuario() {
               <p>Aún no te has inscrito a ningún curso.</p>
             ) : (
               <div className="cursos-inscritos">
-                <p>Tienes <strong>{misInscripciones.length}</strong> curso{misInscripciones.length !== 1 ? 's' : ''} activo{misInscripciones.length !== 1 ? 's' : ''}</p>
+                <p>
+                  Tienes <strong>{misInscripciones.length}</strong> curso
+                  {misInscripciones.length !== 1 ? 's' : ''} activo
+                  {misInscripciones.length !== 1 ? 's' : ''}
+                </p>
                 <button className="btn-ver-detalles" onClick={irACursosDisponibles}>
                   Ver detalles
                 </button>
@@ -104,7 +136,12 @@ export default function Usuario() {
               <p>No hay cursos disponibles en este momento.</p>
             ) : (
               <div className="cursos-preview">
-                <p>Descubre <strong>{cursosDisponibles.length}</strong> curso{cursosDisponibles.length !== 1 ? 's' : ''} disponible{cursosDisponibles.length !== 1 ? 's' : ''}</p>
+                <p>
+                  Descubre <strong>{cursosDisponibles.length}</strong> curso
+                  {cursosDisponibles.length !== 1 ? 's' : ''} disponible
+                  {cursosDisponibles.length !== 1 ? 's' : ''}
+                </p>
+
                 <div className="cursos-list">
                   {cursosDisponibles.map((curso) => (
                     <div key={curso.id} className="curso-preview-item">
@@ -113,12 +150,16 @@ export default function Usuario() {
                     </div>
                   ))}
                 </div>
+
+                {/* ✅ botón también aquí */}
                 <button className="btn-ver-todos" onClick={irACursosDisponibles}>
                   Ver todos los cursos
                 </button>
+
               </div>
             )}
           </div>
+
         </div>
       </main>
     </div>

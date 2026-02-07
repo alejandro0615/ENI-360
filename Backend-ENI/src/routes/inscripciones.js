@@ -1,6 +1,7 @@
 import express from "express";
 import { Inscripcion } from "../database/models/inscripciones.js";
 import { Curso } from "../database/models/cursos.js";
+import { Usuario } from "../database/models/usuarios.js";
 import verifyToken from "../middleware/verifyToken.js";
 
 const router = express.Router();
@@ -28,7 +29,7 @@ router.post("/", verifyToken, async (req, res) => {
       });
     }
 
-    // Verificar que el usuario no esté ya inscrito
+    // Verificar que el usuario no esté ya inscrito en este curso específico
     const inscripcionExistente = await Inscripcion.findOne({
       where: {
         usuario_id,
@@ -41,6 +42,27 @@ router.post("/", verifyToken, async (req, res) => {
         error: "Ya estás inscrito en este curso",
         code: "ALREADY_ENROLLED"
       });
+    }
+
+    // 🔑 Validación: Formadores solo pueden tener UNA inscripción activa
+    const usuario = await Usuario.findByPk(usuario_id, {
+      attributes: ['rol']
+    });
+
+    if (usuario && usuario.rol === "Formador") {
+      const inscripcionesActivas = await Inscripcion.findOne({
+        where: {
+          usuario_id,
+          estado: 'activo'
+        }
+      });
+
+      if (inscripcionesActivas) {
+        return res.status(409).json({
+          error: "Como Formador, solo puedes estar inscrito en un curso a la vez",
+          code: "FORMADOR_SINGLE_ENROLLMENT"
+        });
+      }
     }
 
     // Crear la inscripción

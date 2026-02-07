@@ -12,12 +12,15 @@ export default function GestionCursos() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingCourse, setEditingCourse] = useState(null);
+  const [areas, setAreas] = useState([]);
+  const [areaSeleccionada, setAreaSeleccionada] = useState("");
   const [formData, setFormData] = useState({
     nombre: "",
     descripcion: "",
     duracion: 0,
     categoria: "",
-    nivel: "Básico"
+    nivel: "Básico",
+    areaId: ""
   });
 
   useEffect(() => {
@@ -31,8 +34,19 @@ export default function GestionCursos() {
     } else {
       setUsuario(datosUsuario);
       loadCursos();
+      loadAreas();
     }
   }, [navigate]);
+
+  const loadAreas = async () => {
+    try {
+      const response = await fetch("http://localhost:3000/api/areas");
+      const data = await response.json();
+      setAreas(data.areas || data);
+    } catch (error) {
+      console.error("Error cargando áreas:", error);
+    }
+  };
 
   const loadCursos = async () => {
     try {
@@ -53,20 +67,25 @@ export default function GestionCursos() {
 
     // Validación manual antes del envío
     if (!formData.nombre || !formData.descripcion || !formData.categoria ||
-        formData.duracion <= 0) {
+        formData.duracion <= 0 || !areaSeleccionada) {
       console.log("Validación fallida - campos faltantes o inválidos");
       console.log("Datos del formulario:", formData);
-      alert("Por favor completa todos los campos requeridos correctamente. La duración debe ser mayor a 0.");
+      alert("Por favor completa todos los campos requeridos correctamente. La duración debe ser mayor a 0 y debes seleccionar un área.");
       return;
     }
 
     try {
+      const dataToSend = {
+        ...formData,
+        areaId: areaSeleccionada
+      };
+
       if (editingCourse) {
         console.log("Actualizando curso existente");
-        await UpdateCourse(editingCourse.id, formData);
+        await UpdateCourse(editingCourse.id, dataToSend);
       } else {
         console.log("Creando nuevo curso");
-        const result = await CreateCourse(formData);
+        const result = await CreateCourse(dataToSend);
         console.log("Resultado de CreateCourse:", result);
       }
       console.log("Operación exitosa, cerrando modal");
@@ -77,8 +96,10 @@ export default function GestionCursos() {
         descripcion: "",
         duracion: 0,
         categoria: "",
-        nivel: "Básico"
+        nivel: "Básico",
+        areaId: ""
       });
+      setAreaSeleccionada("");
       loadCursos();
     } catch (error) {
       console.error("Error guardando curso:", error);
@@ -93,8 +114,10 @@ export default function GestionCursos() {
       descripcion: curso.descripcion,
       duracion: curso.duracion,
       categoria: curso.categoria,
-      nivel: curso.nivel
+      nivel: curso.nivel,
+      areaId: curso.areaId
     });
+    setAreaSeleccionada(curso.areaId || "");
     setShowForm(true);
   };
 
@@ -145,8 +168,10 @@ export default function GestionCursos() {
                 descripcion: "",
                 duracion: 0,
                 categoria: "",
-                nivel: "Básico"
+                nivel: "Básico",
+                areaId: ""
               });
+              setAreaSeleccionada("");
             }}>
               <span className="btn-icon-plus">+</span> Nuevo Curso
             </button>
@@ -229,6 +254,24 @@ export default function GestionCursos() {
                   </div>
                 </div>
 
+                {/* Selector de área */}
+                <div className="form-group">
+                  <label>Área / Red:</label>
+                  <select
+                    className="input-control"
+                    value={areaSeleccionada}
+                    onChange={(e) => setAreaSeleccionada(e.target.value)}
+                    required
+                  >
+                    <option value="">Selecciona un área</option>
+                    {areas.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.codigo} - {a.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="form-actions">
                   <button type="submit" className="btn-guardar">
                     {editingCourse ? "Actualizar" : "Crear"} Curso
@@ -273,8 +316,10 @@ export default function GestionCursos() {
                   duracion: 0,
                   precio: 0,
                   categoria: "",
-                  nivel: "Básico"
+                  nivel: "Básico",
+                  areaId: ""
                 });
+                setAreaSeleccionada("");
               }}>
                 + Crear Primer Curso
               </button>
@@ -303,6 +348,13 @@ export default function GestionCursos() {
                         <div>
                           <span className="info-label">Duración</span>
                           <span className="info-value">{curso.duracion} horas</span>
+                        </div>
+                      </div>
+                      <div className="info-item">
+                        <span className="info-icon">🏢</span>
+                        <div>
+                          <span className="info-label">Área</span>
+                          <span className="info-value">{curso.areaId}</span>
                         </div>
                       </div>
                     </div>
