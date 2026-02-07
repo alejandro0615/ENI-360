@@ -76,7 +76,7 @@ export default function Usuario() {
   return (
     <div className="usuario-container">
       <header className="usuario-header">
-        <h2>Bienvenido, {usuario.nombre}, {usuario.rol} 👋</h2>
+        <h2>Bienvenido, {usuario.nombre}, {usuario.rol} 🤖</h2>
 
         <div className="header-buttons">
 
