@@ -39,6 +39,22 @@ export const Curso = sequelize.define(
       type: DataTypes.ENUM('Básico', 'Intermedio', 'Avanzado'),
       allowNull: false,
     },
+    areaId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'areas',
+        key: 'id'
+      }
+    },
+    usuarioId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'usuarios',
+        key: 'id'
+      }
+    },
     created_at: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW,

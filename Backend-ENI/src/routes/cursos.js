@@ -1,5 +1,9 @@
 import express from "express";
 import { Curso } from "../database/models/cursos.js";
+import { Area } from "../database/models/area.js";
+import { Usuario } from "../database/models/usuarios.js";
+import { sequelize } from "../database/config.js";
+import { QueryTypes } from "sequelize";
 import verifyToken from "../middleware/verifyToken.js";
 import verifyAdmin from "../middleware/verifyAdmin.js";
 
@@ -10,7 +14,7 @@ router.get("/", async (req, res) => {
   try {
     const cursos = await Curso.findAll({
       order: [['created_at', 'DESC']],
-      attributes: ['id', 'nombre', 'descripcion', 'duracion', 'categoria', 'nivel', 'created_at', 'updated_at']
+      attributes: ['id', 'nombre', 'descripcion', 'duracion', 'categoria', 'nivel', 'areaId', 'usuarioId', 'created_at', 'updated_at']
     });
 
     res.json(cursos);
@@ -23,13 +27,104 @@ router.get("/", async (req, res) => {
   }
 });
 
+// GET /api/cursos/area/:areaId - Obtener cursos por área específica
+router.get("/area/:areaId", async (req, res) => {
+  try {
+    const { areaId } = req.params;
+
+    const cursos = await Curso.findAll({
+      where: { areaId: parseInt(areaId) },
+      attributes: ['id', 'nombre', 'descripcion', 'duracion', 'categoria', 'nivel', 'areaId', 'usuarioId', 'created_at', 'updated_at'],
+      order: [['created_at', 'DESC']]
+    });
+
+    res.json(cursos);
+  } catch (error) {
+    console.error("Error al obtener cursos por área:", error);
+    res.status(500).json({
+      error: "Error interno del servidor",
+      code: "INTERNAL_ERROR"
+    });
+  }
+});
+
+// GET /api/cursos/mis-cursos - Obtener mis cursos (solo del área del usuario autenticado)
+router.get("/mios", verifyToken, async (req, res) => {
+  try {
+    const usuarioId = req.usuario.id;
+
+    // Obtener el usuario para saber su areaId
+    const usuario = await Usuario.findByPk(usuarioId, {
+      attributes: ['id', 'areaId']
+    });
+
+    if (!usuario) {
+      return res.status(404).json({
+        error: "Usuario no encontrado",
+        code: "USER_NOT_FOUND"
+      });
+    }
+
+    if (!usuario.areaId) {
+      return res.json([]);
+    }
+
+    // Obtener solo los cursos del área del usuario
+    const cursos = await Curso.findAll({
+      where: { areaId: usuario.areaId },
+      attributes: ['id', 'nombre', 'descripcion', 'duracion', 'categoria', 'nivel', 'areaId', 'usuarioId', 'created_at', 'updated_at'],
+      order: [['created_at', 'DESC']]
+    });
+
+    res.json(cursos);
+  } catch (error) {
+    console.error("Error al obtener mis cursos:", error);
+    res.status(500).json({
+      error: "Error interno del servidor",
+      code: "INTERNAL_ERROR"
+    });
+  }
+});
+
+// GET /api/cursos/:id/usuarios - Obtener usuarios vinculados a un curso
+router.get("/:id/usuarios", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const usuarios = await sequelize.query(
+      `SELECT u.id, u.nombre, u.email, u.areaId
+       FROM usuarios u
+       INNER JOIN cursos_usuarios cu ON u.id = cu.usuarioId
+       WHERE cu.cursoId = ?
+       ORDER BY u.nombre ASC`,
+      { replacements: [id], type: QueryTypes.SELECT }
+    );
+
+    res.json(usuarios);
+  } catch (error) {
+    console.error("Error al obtener usuarios del curso:", error);
+    res.status(500).json({
+      error: "Error interno del servidor",
+      code: "INTERNAL_ERROR"
+    });
+  }
+});
+
 // POST /api/cursos - Crear nuevo curso (requiere admin)
 router.post("/", verifyAdmin, async (req, res) => {
   try {
-    const { nombre, descripcion, duracion, categoria, nivel } = req.body;
+    const usuarioId = req.usuario?.id;
+    const { nombre, descripcion, duracion, categoria, nivel, areaId } = req.body;
+
+    if (!usuarioId) {
+      return res.status(401).json({
+        error: "Usuario no autenticado",
+        code: "UNAUTHORIZED"
+      });
+    }
 
     // Validaciones
-    if (!nombre || !descripcion || !duracion || !categoria || !nivel) {
+    if (!nombre || !descripcion || !duracion || !categoria || !nivel || !areaId) {
       return res.status(400).json({
         error: "Todos los campos son requeridos",
         code: "MISSING_FIELDS"
@@ -66,13 +161,38 @@ router.post("/", verifyAdmin, async (req, res) => {
       });
     }
 
+    // Validar que el areaId existe
+    const area = await Area.findByPk(areaId);
+    if (!area) {
+      return res.status(400).json({
+        error: "El área especificada no existe",
+        code: "INVALID_AREA"
+      });
+    }
+
     const nuevoCurso = await Curso.create({
       nombre,
       descripcion,
       duracion,
       categoria,
-      nivel
+      nivel,
+      areaId,
+      usuarioId
     });
+
+    // 🔑 Obtener todos los usuarios del área y vincularlos
+    const usuariosDelArea = await Usuario.findAll({
+      where: { areaId: areaId },
+      attributes: ['id']
+    });
+
+    // Crear registros en cursos_usuarios
+    for (const usuario of usuariosDelArea) {
+      await sequelize.query(
+        'INSERT INTO cursos_usuarios (cursoId, usuarioId) VALUES (?, ?)',
+        { replacements: [nuevoCurso.id, usuario.id] }
+      );
+    }
 
     res.status(201).json({
       id: nuevoCurso.id,
@@ -81,6 +201,9 @@ router.post("/", verifyAdmin, async (req, res) => {
       duracion: nuevoCurso.duracion,
       categoria: nuevoCurso.categoria,
       nivel: nuevoCurso.nivel,
+      areaId: nuevoCurso.areaId,
+      usuarioId: nuevoCurso.usuarioId,
+        usuariosAsignados: usuariosDelArea.length,
       created_at: nuevoCurso.created_at,
       updated_at: nuevoCurso.updated_at
     });
@@ -98,7 +221,7 @@ router.post("/", verifyAdmin, async (req, res) => {
 router.put("/:id", verifyAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, descripcion, duracion, categoria, nivel } = req.body;
+    const { nombre, descripcion, duracion, categoria, nivel, areaId } = req.body;
 
     const curso = await Curso.findByPk(id);
     if (!curso) {
@@ -110,6 +233,9 @@ router.put("/:id", verifyAdmin, async (req, res) => {
 
     // Validaciones opcionales (solo si se proporcionan)
     const updateData = {};
+
+  // Guardar areaId anterior para detectar cambios
+  const areaIdAnterior = curso.areaId;
 
     if (nombre !== undefined) {
       if (typeof nombre !== 'string' || nombre.trim().length === 0 || nombre.length > 255) {
@@ -163,10 +289,44 @@ router.put("/:id", verifyAdmin, async (req, res) => {
       updateData.nivel = nivel;
     }
 
+    if (areaId !== undefined) {
+      const area = await Area.findByPk(areaId);
+      if (!area) {
+        return res.status(400).json({
+          error: "El área especificada no existe",
+          code: "INVALID_AREA"
+        });
+      }
+      updateData.areaId = areaId;
+    }
+
     // Actualizar timestamps
     updateData.updated_at = new Date();
 
     await curso.update(updateData);
+    // 🔑 Si cambió el areaId, actualizar usuarios vinculados
+    if (areaId !== undefined && areaId !== areaIdAnterior) {
+      // Eliminar vinculaciones antiguas
+      await sequelize.query(
+        'DELETE FROM cursos_usuarios WHERE cursoId = ?',
+        { replacements: [id] }
+      );
+
+      // Obtener nuevos usuarios del área
+      const nuevosusuarios = await Usuario.findAll({
+        where: { areaId: areaId },
+        attributes: ['id']
+      });
+
+      // Crear nuevas vinculaciones
+      for (const usuario of nuevosusuarios) {
+        await sequelize.query(
+          'INSERT INTO cursos_usuarios (cursoId, usuarioId) VALUES (?, ?)',
+          { replacements: [id, usuario.id] }
+        );
+      }
+    }
+
 
     res.json({
       id: curso.id,
@@ -175,6 +335,8 @@ router.put("/:id", verifyAdmin, async (req, res) => {
       duracion: curso.duracion,
       categoria: curso.categoria,
       nivel: curso.nivel,
+      areaId: curso.areaId,
+      usuarioId: curso.usuarioId,
       updated_at: curso.updated_at
     });
 

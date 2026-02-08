@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import GetAllCourses from "./services/Cursos/GetAllCourses";
+import GetCoursesByArea from "./services/Cursos/GetCoursesByArea";
+import GetAllAreas from "./services/Areas/GetAllAreas";
 import EnrollCourse from "./services/Inscripciones/EnrollCourse";
 import GetUserEnrollments from "./services/Inscripciones/GetUserEnrollments";
 
@@ -10,6 +12,7 @@ export default function CursosDisponibles() {
   const [cursos, setCursos] = useState([]);
   const [inscripciones, setInscripciones] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [areasMap, setAreasMap] = useState({});
   const [enrolling, setEnrolling] = useState(null);
 
   useEffect(() => {
@@ -20,14 +23,66 @@ export default function CursosDisponibles() {
       navigate("/login");
     } else {
       setUsuario(datosUsuario);
-      loadCursos();
+      // cargar cursos filtrados por area para usuarios normales, o todos para admin
+      // cargar áreas primero (para mapear nombres) y luego cursos
+      loadAreas().then(() => loadCursos(datosUsuario));
       loadUserEnrollments();
     }
   }, [navigate]);
 
-  const loadCursos = async () => {
+  const loadAreas = async () => {
     try {
-      const data = await GetAllCourses();
+      const arr = await GetAllAreas();
+      if (Array.isArray(arr)) {
+        const map = {};
+        arr.forEach((a) => {
+          // normalizar posibles campos
+          const id = String(a.id ?? a.codigo ?? a.codigoArea ?? a.areaId ?? a.area_id ?? '');
+          const nombre = a.nombre ?? a.name ?? a.descripcion ?? a.nombreArea ?? '';
+          if (id) map[id] = nombre || '';
+        });
+        setAreasMap(map);
+      }
+    } catch (err) {
+      console.warn('No se pudieron cargar las áreas:', err);
+    }
+  };
+
+  const loadCursos = async (usuarioParam) => {
+    try {
+      let data = [];
+      const u = usuarioParam || usuario || JSON.parse(localStorage.getItem('usuario'));
+      const isAdmin = (u && ((u.rol && u.rol.toLowerCase() === 'admin') || u.rol === 'Administrador'));
+
+      if (isAdmin) {
+        data = await GetAllCourses();
+      } else if (u && u.areaId) {
+        // Intentar endpoint por área; si falla, traer todos y luego filtrar.
+        try {
+          data = await GetCoursesByArea(u.areaId);
+        } catch (err) {
+          console.warn('GetCoursesByArea falló, usando GetAllCourses como fallback:', err);
+          data = await GetAllCourses();
+        }
+
+        // Asegurar filtrado client-side para evitar que cursos de otras áreas aparezcan
+        // (maneja diferencias de nombres de campo y tipos: areaId, area_id, area)
+        if (Array.isArray(data)) {
+          const areaStr = String(u.areaId);
+          data = data.filter((c) => {
+            return (
+              String(c.areaId || '') === areaStr ||
+              String(c.area_id || '') === areaStr ||
+              String(c.area || '') === areaStr
+            );
+          });
+        } else {
+          data = [];
+        }
+      } else {
+        // fallback: intentar obtener todos
+        data = await GetAllCourses();
+      }
       setCursos(data);
     } catch (error) {
       console.error("Error cargando cursos:", error);
@@ -45,6 +100,14 @@ export default function CursosDisponibles() {
     }
   };
 
+  const getAreaName = (curso) => {
+    // revisar varios nombres de campo posibles
+    const id = String(curso.areaId ?? curso.area_id ?? curso.area ?? '');
+    if (id && areasMap[id]) return areasMap[id];
+    // si el curso ya incluye un nombre de área en otro campo
+    return curso.areaNombre || curso.areaName || curso.nombreArea || 'Sin área';
+  };
+
   const handleEnroll = async (courseId) => {
     setEnrolling(courseId);
     try {
@@ -53,7 +116,7 @@ export default function CursosDisponibles() {
       loadUserEnrollments(); // Recargar inscripciones
     } catch (error) {
       console.error("Error inscribiéndose al curso:", error);
-      alert("Error al inscribirse al curso. Inténtalo de nuevo.");
+      alert(`❌ ${error.message || "Error al inscribirse al curso. Inténtalo de nuevo."}`);
     } finally {
       setEnrolling(null);
     }
@@ -95,6 +158,9 @@ export default function CursosDisponibles() {
           <div className="cursos-grid">
             {cursos.map((curso) => {
               const enrolled = isEnrolled(curso.id);
+              const esFormador = usuario?.rol === "Formador";
+              const formadorTieneInscripcion = esFormador && inscripciones.length > 0;
+              
               return (
                 <div key={curso.id} className="curso-card">
                   <div className="curso-header">
@@ -109,6 +175,7 @@ export default function CursosDisponibles() {
                     <div className="curso-info">
                       <span><strong>Categoría:</strong> {curso.categoria}</span>
                       <span><strong>Duración:</strong> {curso.duracion} horas</span>
+                      <span><strong>Área:</strong> {getAreaName(curso)}</span>
                     </div>
                   </div>
 
@@ -116,6 +183,11 @@ export default function CursosDisponibles() {
                     {enrolled ? (
                       <div className="enrolled-status">
                         <span className="enrolled-text">✓ Inscrito</span>
+                      </div>
+                    ) : formadorTieneInscripcion ? (
+                      <div className="enrollment-disabled">
+                        <span className="disabled-text">🔒 Ya tienes un curso</span>
+                        <small>Los formadores pueden cursar un curso a la vez</small>
                       </div>
                     ) : (
                       <button

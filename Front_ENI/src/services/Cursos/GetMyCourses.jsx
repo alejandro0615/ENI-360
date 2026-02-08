@@ -1,6 +1,5 @@
-async function EnrollCourse(courseId) {
+async function GetMyCourses() {
     const token = localStorage.getItem("token");
-    console.log("EnrollCourse - CourseId:", courseId);
 
     if (!token) {
         throw new Error("No hay token de autenticación");
@@ -10,27 +9,20 @@ async function EnrollCourse(courseId) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-        const response = await fetch('http://localhost:3000/api/inscripciones', {
-            method: 'POST',
+        const response = await fetch('http://localhost:3000/api/cursos/mios', {
+            method: 'GET',
             headers: {
                 "Content-Type": "application/json",
                 "Accept": "application/json",
                 "Authorization": `Bearer ${token}`,
             },
-            body: JSON.stringify({ curso_id: courseId }),
             signal: controller.signal
         });
 
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-            let errorData;
-            try {
-                errorData = await response.json();
-            } catch (e) {
-                errorData = { error: "Error desconocido del servidor" };
-            }
-            throw new Error(errorData.error || `HTTP ${response.status}`);
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
         const data = await response.json();
@@ -42,4 +34,4 @@ async function EnrollCourse(courseId) {
         throw error;
     }
 }
-export default EnrollCourse;
+export default GetMyCourses;

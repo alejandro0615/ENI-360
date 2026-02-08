@@ -49,7 +49,8 @@ export default function Administrador() {
           <div className="admin-welcome">
             <h2 className="welcome-text">
               Bienvenido, {usuario.nombre} (Administrador)
-              <span className="emoji-spin">👋</span>
+<span className="emoji-bounce">🤖</span>
+
             </h2>
           </div>
 

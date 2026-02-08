@@ -32,6 +32,27 @@ sequelize.sync().then(() => {
   console.log("🗂️ Modelos sincronizados con MySQL");
 });
 
+// Asegurar existencia de tabla de relación cursos_usuarios (evita ER_NO_SUCH_TABLE)
+sequelize.sync().then(async () => {
+  try {
+    await sequelize.query(`
+      CREATE TABLE IF NOT EXISTS cursos_usuarios (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        cursoId INT NOT NULL,
+        usuarioId INT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (cursoId) REFERENCES cursos(id) ON DELETE CASCADE,
+        FOREIGN KEY (usuarioId) REFERENCES usuarios(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_curso_usuario (cursoId, usuarioId),
+        INDEX idx_cursoId (cursoId),
+        INDEX idx_usuarioId (usuarioId)
+      );
+    `);
+    console.log('✅ Tabla cursos_usuarios creada/verificada');
+  } catch (err) {
+    console.error('Error creando/verificando tabla cursos_usuarios:', err);
+  }
+});
 // Rutas
 app.use("/api/usuarios", usuarioRoutes);
 app.use("/api/areas", areaRoutes);
